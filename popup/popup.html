@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Cerebro</title>
+  <link rel="stylesheet" href="pop.css" />
+</head>
+<body>
+  <h2>🧠 Cerebro</h2>
+  <div class="controls">
+    <button id="organize">Organize Tabs with AI</button>
+    <button id="clearGroups">Clear All Groups</button>
+    <button id="toggleTabs" class="toggle-btn">Hide Tabs</button>
+  </div>
+  <div class="status" id="status"></div>
+  <input id="search" type="text" placeholder="Search tabs..." />
+  <div id="categories"></div>
+  <script src="../scripts/ai.js"></script>
+  <script src="popup.js"></script>
+  <div id="tooltip" style="display:none;"></div>
+</body>
+</html>
