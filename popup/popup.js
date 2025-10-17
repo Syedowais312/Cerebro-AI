@@ -8,6 +8,7 @@ document.getElementById("organize").addEventListener("click", async () => {
   chrome.runtime.sendMessage({ action: "organizeTabs" }, (response) => {
     if (response && response.success) {
       showStatus("Tabs organized successfully!");
+      initializeTabs();
       setTimeout(() => hideStatus(), 2000);
     } else {
       showStatus("Error organizing tabs", "error");
@@ -47,11 +48,26 @@ toggleTabsBtn.addEventListener("click", () => {
   tabsHidden = !tabsHidden;
   toggleTabsBtn.textContent = tabsHidden ? "Show Tabs" : "Hide Tabs";
   toggleTabsBtn.classList.toggle("active", tabsHidden);
-  
-  // Toggle visibility of all tab lists
-  const tabLists = document.querySelectorAll(".tab-list");
-  tabLists.forEach(list => {
-    list.style.display = tabsHidden ? "none" : "";
+
+  // Collapse/expand browser tab groups; do not hide popup lists
+  chrome.tabGroups.query({}, (groups) => {
+    const proceedCollapse = () => {
+      chrome.runtime.sendMessage({ action: "setGroupsCollapsed", collapsed: tabsHidden }, (resp) => {
+        if (!resp || !resp.success) {
+          showStatus("Failed to toggle browser tabs", "error");
+          setTimeout(() => hideStatus(), 2000);
+        }
+      });
+    };
+
+    // If no groups exist and user is hiding, organize first then collapse
+    if (tabsHidden && (!groups || groups.length === 0)) {
+      chrome.runtime.sendMessage({ action: "organizeTabs" }, () => {
+        proceedCollapse();
+      });
+    } else {
+      proceedCollapse();
+    }
   });
 });
 
@@ -126,7 +142,7 @@ function renderTabs(grouped, query = "") {
 
     const list = document.createElement("div");
     list.className = "tab-list";
-    list.style.display = "none";
+    list.style.display = "block";
 
     visibleTabs.forEach(tab => {
       const itemContainer = document.createElement("div");
@@ -210,53 +226,19 @@ function preloadSummaries(tabs) {
     
     // Update UI elements with this tab ID
     updateTabSummaryInUI(tab.id, "Loading summary...");
-    
-    // Make sure to retry if summary fails to load
 
-    chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: () => {
-        // Improved content extraction
-        const meta = document.querySelector('meta[name="description"]');
-        const og = document.querySelector('meta[property="og:description"]');
-        const twitter = document.querySelector('meta[name="twitter:description"]');
-        const h1 = document.querySelector('h1');
-        const h2 = document.querySelector('h2');
-        
-        // Get first paragraph with substantial content
-        let bestParagraph = "";
-        const paragraphs = document.querySelectorAll('p');
-        for (const p of paragraphs) {
-          const text = p.innerText?.trim();
-          if (text && text.length > 40) {
-            bestParagraph = text;
-            break;
-          }
-        }
-        
-        const text = [meta?.content, og?.content, twitter?.content, h1?.innerText, h2?.innerText, bestParagraph]
-          .filter(Boolean)
-          .join(". ");
-        return text || document.title || location.hostname;
-      },
-    }, async (results) => {
-      try {
-        const raw = results && results[0] ? results[0].result : "";
-        const summary = await window.summarizeExtractedText(raw);
-        const finalSummary = summary || (tab.title || tab.url);
-        
-        // Store the summary
+    // Ask background for smart summary and update UI
+    chrome.runtime.sendMessage({ action: "summarizeTabSmart", tabId: tab.id }, (resp) => {
+      if (resp && resp.success && resp.summary) {
+        const finalSummary = resp.summary || (tab.title || tab.url);
         state.summariesByTabId[tab.id] = finalSummary;
-        
-        // Update UI elements with this tab ID
         updateTabSummaryInUI(tab.id, finalSummary);
-        // Persist summary for background overlay usage
         chrome.storage.local.set({ ["tab_summary_" + tab.id]: finalSummary });
-      } catch (error) {
-        console.error("Error generating summary:", error);
-        state.summariesByTabId[tab.id] = tab.title || tab.url;
-        updateTabSummaryInUI(tab.id, tab.title || tab.url);
-        chrome.storage.local.set({ ["tab_summary_" + tab.id]: (tab.title || tab.url) });
+      } else {
+        const fallback = tab.title || tab.url;
+        state.summariesByTabId[tab.id] = fallback;
+        updateTabSummaryInUI(tab.id, fallback);
+        chrome.storage.local.set({ ["tab_summary_" + tab.id]: fallback });
       }
     });
   }
@@ -274,11 +256,17 @@ function updateTabSummaryInUI(tabId, summaryText) {
 async function initializeTabs() {
   showStatus("Loading tabs...");
   try {
-    const tabs = await chrome.tabs.query({});
-    state.grouped = await groupTabsAI(tabs);
-    renderTabs(state.grouped);
-    preloadSummaries(tabs);
-    hideStatus();
+    chrome.runtime.sendMessage({ action: "groupTabsSmart" }, (resp) => {
+      if (resp && resp.success && resp.grouped) {
+        state.grouped = resp.grouped;
+        renderTabs(state.grouped);
+        const allTabs = Object.values(state.grouped).flat();
+        preloadSummaries(allTabs);
+        hideStatus();
+      } else {
+        showStatus("Error loading tabs", "error");
+      }
+    });
   } catch (error) {
     console.error("Error initializing tabs:", error);
     showStatus("Error loading tabs", "error");

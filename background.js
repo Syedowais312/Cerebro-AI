@@ -13,7 +13,7 @@ const GROUP_CONFIG = {
   "🌐 Others": { color: "grey", collapsed: false },
   "🤖 AI": { color: "red", collapsed: false },
   "🛒 Shopping": { color: "yellow", collapsed: false },
-  "👥 Social": { color: "brown", collapsed: false },
+  "👥 Social": { color: "grey", collapsed: false },
   "📰 News": { color: "blue", collapsed: false },
   "🏆 Sports": { color: "green", collapsed: false },
   "💰 Finance": { color: "purple", collapsed: false },
@@ -214,6 +214,66 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
     }, (results) => {
       const raw = results && results[0] ? results[0].result : "";
       sendResponse({ raw });
+    });
+    return true;
+  }
+  // Collapse or expand all tab groups in the browser
+  if (req.action === "setGroupsCollapsed") {
+    const collapsed = !!req.collapsed;
+    chrome.tabGroups.query({}, (groups) => {
+      let remaining = groups.length;
+      if (remaining === 0) {
+        sendResponse({ success: true, count: 0 });
+        return;
+      }
+      groups.forEach((g) => {
+        chrome.tabGroups.update(g.id, { collapsed }, () => {
+          remaining -= 1;
+          if (remaining === 0) sendResponse({ success: true, count: groups.length });
+        });
+      });
+    });
+    return true;
+  }
+  // Provide grouped tabs to the popup via background classifier
+  if (req.action === "groupTabsSmart") {
+    chrome.tabs.query({}, async (tabs) => {
+      try {
+        const grouped = await groupTabsAI(tabs);
+        sendResponse({ success: true, grouped });
+      } catch (e) {
+        console.log("groupTabsSmart error", e);
+        sendResponse({ success: false, error: String(e) });
+      }
+    });
+    return true;
+  }
+  // Summarize a tab using background extraction and lightweight summarizer
+  if (req.action === "summarizeTabSmart") {
+    const { tabId } = req;
+    chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        const meta = document.querySelector('meta[name="description"]');
+        const og = document.querySelector('meta[property="og:description"]');
+        const twitter = document.querySelector('meta[name="twitter:description"]');
+        const h1 = document.querySelector('h1');
+        const h2 = document.querySelector('h2');
+        let bestParagraph = "";
+        const paragraphs = document.querySelectorAll('p');
+        for (const p of paragraphs) {
+          const text = p.innerText?.trim();
+          if (text && text.length > 40) { bestParagraph = text; break; }
+        }
+        const text = [meta?.content, og?.content, twitter?.content, h1?.innerText, h2?.innerText, bestParagraph]
+          .filter(Boolean)
+          .join('. ');
+        return text || document.title || location.hostname;
+      },
+    }, (results) => {
+      const raw = results && results[0] ? results[0].result : "";
+      const summary = summarizeExtractedText(raw);
+      sendResponse({ success: true, summary });
     });
     return true;
   }
