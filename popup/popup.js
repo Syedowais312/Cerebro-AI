@@ -25,7 +25,8 @@ document.getElementById("clearGroups").addEventListener("click", async () => {
         const tabs = await chrome.tabs.query({ groupId: group.id });
         const ids = tabs.map(t => t.id);
         if (ids.length) await chrome.tabs.ungroup(ids);
-        await chrome.tabGroups.update(group.id, { collapsed: false, title: group.title });
+        // Remove collapsed: false from tabGroups.update in clearGroups handler
+        await chrome.tabGroups.update(group.id, { title: group.title });
       } catch (e) {
         console.log("Failed to ungroup", group.id, e);
       }
@@ -153,6 +154,10 @@ function renderTabs(grouped, query = "") {
       item.innerHTML = `<span class="title">${escapeHtml(tab.title || tab.url || "Untitled")}</span>`;
       item.addEventListener("click", () => {
         chrome.tabs.update(tab.id, { active: true });
+        // Only expand the group containing the clicked tab
+        if (tab.groupId !== undefined) {
+          chrome.tabGroups.update(tab.groupId, { collapsed: false });
+        }
       });
       // Show tooltip and page overlay summary on hover
       item.addEventListener("mouseenter", (e) => {

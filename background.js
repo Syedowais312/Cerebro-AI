@@ -4,23 +4,23 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 // Tab group configuration
+// Remove collapsed: false from GROUP_CONFIG and cfg
 const GROUP_CONFIG = {
-  "🎵 Music": { color: "blue", collapsed: false },
-  "📚 Education": { color: "green", collapsed: false },
-  "🧬 Research": { color: "purple", collapsed: false },
-  "💼 Work": { color: "orange", collapsed: false },
-  "🎮 Entertainment": { color: "pink", collapsed: false },
-  "🌐 Others": { color: "grey", collapsed: false },
-  "🤖 AI": { color: "red", collapsed: false },
-  "🛒 Shopping": { color: "yellow", collapsed: false },
-  "👥 Social": { color: "grey", collapsed: false },
-  "📰 News": { color: "blue", collapsed: false },
-  "🏆 Sports": { color: "green", collapsed: false },
-  "💰 Finance": { color: "purple", collapsed: false },
-  "🌤️ Weather": { color: "orange", collapsed: false },
-  "🛫 Travel": { color: "pink", collapsed: false },
-  "🏥 Health": { color: "grey", collapsed: false },
-  
+  "🎵 Music": { color: "blue" },
+  "📚 Education": { color: "green" },
+  "🧬 Research": { color: "purple" },
+  "💼 Work": { color: "orange" },
+  "🎮 Entertainment": { color: "pink" },
+  "🌐 Others": { color: "grey" },
+  "🤖 AI": { color: "red" },
+  "🛒 Shopping": { color: "yellow" },
+  "👥 Social": { color: "grey" },
+  "📰 News": { color: "blue" },
+  "🏆 Sports": { color: "green" },
+  "💰 Finance": { color: "purple" },
+  "🌤️ Weather": { color: "orange" },
+  "🛫 Travel": { color: "pink" },
+  "🏥 Health": { color: "grey" }
 };
 
 async function organizeAllTabs() {
@@ -32,21 +32,28 @@ async function organizeAllTabs() {
   for (const [category, tabList] of Object.entries(grouped)) {
     if (tabList.length === 0) continue;
 
-    const cfg = GROUP_CONFIG[category] || { color: "grey", collapsed: false };
+    const cfg = GROUP_CONFIG[category] || { color: "grey" };
     const existing = existingGroups.find(g => g.title === category);
 
     try {
       let groupId;
       if (existing) {
         groupId = existing.id;
+        // Keep the existing collapsed state
+        const currentGroup = await pTabGroupsQuery({id: groupId});
+        const wasCollapsed = currentGroup[0]?.collapsed;
+        await pTabGroupsUpdate(groupId, { title: category, color: cfg.color });
+        if (wasCollapsed) {
+          await pTabGroupsUpdate(groupId, { collapsed: true });
+        }
       } else {
         // Create by grouping the first tab, then update
         groupId = await pTabsGroup({ tabIds: tabList[0].id });
-        await pTabGroupsUpdate(groupId, { title: category, color: cfg.color, collapsed: cfg.collapsed });
+        await pTabGroupsUpdate(groupId, { title: category, color: cfg.color, collapsed: true });
       }
 
-      // Update title with count and collapse state; then add all tabs to the group
-      await pTabGroupsUpdate(groupId, { title: `${category} (${tabList.length})`, color: cfg.color });
+      // Update title with count and add all tabs to the group
+      await pTabGroupsUpdate(groupId, { title: `${category} (${tabList.length})` });
       const tabIds = tabList.map(t => t.id);
       await pTabsGroup({ groupId, tabIds });
     } catch (error) {
@@ -113,7 +120,8 @@ chrome.tabs.onCreated.addListener(async (tab) => {
 
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete') {
-    setTimeout(() => organizeAllTabs(), 1000);
+    // Don't auto-organize on tab updates to prevent unwanted group expansion
+    // setTimeout(() => organizeAllTabs(), 1000);
   }
 });
 
@@ -125,6 +133,7 @@ chrome.tabs.onRemoved.addListener(async () => {
 chrome.tabs.onActivated.addListener(async ({ tabId }) => {
   try {
     const tab = await new Promise(resolve => chrome.tabs.get(tabId, resolve));
+    // Don't expand the group when tab becomes active
     const url = tab?.url || "";
     if (!url || /^(chrome|edge|about|chrome-extension):/i.test(url)) return;
 
@@ -367,6 +376,19 @@ function pTabGroupsUpdate(groupId, updateProperties) {
   });
 }
 
+function pTabsGroup(options) {
+  return new Promise((resolve, reject) => {
+    chrome.tabs.group(options, (groupId) => {
+      const err = chrome.runtime.lastError;
+      if (err) reject(err);
+      else resolve(groupId);
+    });
+  });
+}
+
+// Remove any automatic tab group expansion on tab activation
+// Ensure tab groups remain collapsed unless user explicitly expands them
+// If you have code like chrome.tabGroups.update(groupId, { collapsed: false }), remove or comment it out
 function pTabsGroup(options) {
   return new Promise((resolve, reject) => {
     chrome.tabs.group(options, (groupId) => {
