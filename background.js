@@ -128,12 +128,10 @@ chrome.tabs.onActivated.addListener(async ({ tabId }) => {
     const url = tab?.url || "";
     if (!url || /^(chrome|edge|about|chrome-extension):/i.test(url)) return;
 
-    // Try to fetch a cached summary
     const key = "tab_summary_" + tabId;
     const store = await new Promise(resolve => chrome.storage.local.get([key], resolve));
     let summaryText = store[key];
 
-    // If no cached summary, extract and synthesize quickly
     if (!summaryText) {
       const [result] = await new Promise(resolve => {
         chrome.scripting.executeScript({
@@ -157,14 +155,13 @@ chrome.tabs.onActivated.addListener(async ({ tabId }) => {
         }, (res) => resolve(res || []));
       });
       const raw = result && result.result ? result.result : "";
-      summaryText = summarizeExtractedText(raw) || tab.title || tab.url || "";
+      // Use Chrome Summarizer API if available; fallback otherwise
+      summaryText = (await summarizeWithChromeAI(raw)) || tab.title || tab.url || "";
       chrome.storage.local.set({ [key]: summaryText });
     }
 
-    // Send message to content script to display
     chrome.tabs.sendMessage(tabId, { action: "showSummaryOverlay", summary: summaryText });
   } catch (err) {
-    // Ignore errors (e.g., restricted pages)
     console.warn("onActivated overlay error:", err);
   }
 });
@@ -183,6 +180,22 @@ function summarizeExtractedText(raw) {
     summary = goodSentences.length > 0 ? goodSentences.join(" ") : sentences.slice(0, 3).join(" ");
   }
   return summary;
+}
+
+// Prefer Chrome's built-in Summarizer API when available
+async function summarizeWithChromeAI(text) {
+  try {
+    if (globalThis.ai && ai.summarizer && ai.summarizer.create) {
+      const summarizer = await ai.summarizer.create();
+      const output = await summarizer.summarize(text || "");
+      if (output && typeof output === "string" && output.trim()) {
+        return output.trim();
+      }
+    }
+  } catch (e) {
+    console.warn("Chrome Summarizer API unavailable or failed:", e);
+  }
+  return summarizeExtractedText(text || "");
 }
 
 chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
@@ -270,9 +283,9 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
           .join('. ');
         return text || document.title || location.hostname;
       },
-    }, (results) => {
+    }, async (results) => {
       const raw = results && results[0] ? results[0].result : "";
-      const summary = summarizeExtractedText(raw);
+      const summary = await summarizeWithChromeAI(raw);
       sendResponse({ success: true, summary });
     });
     return true;

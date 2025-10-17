@@ -154,6 +154,21 @@ function renderTabs(grouped, query = "") {
       item.addEventListener("click", () => {
         chrome.tabs.update(tab.id, { active: true });
       });
+      // Show tooltip and page overlay summary on hover
+      item.addEventListener("mouseenter", (e) => {
+        showTooltip(e, tab);
+        const summaryText = state.summariesByTabId[tab.id] || tab.title || tab.url || "Loading summary...";
+        if (tab.url && !/^(chrome|edge|about|chrome-extension):/i.test(tab.url)) {
+          chrome.tabs.sendMessage(tab.id, { action: "showSummaryOverlay", summary: summaryText }, (resp) => {
+            if (chrome.runtime.lastError) {
+              // Optionally log or ignore the error
+            }
+          });
+        }
+      });
+      item.addEventListener("mouseleave", () => {
+        hideTooltip();
+      });
       
       // Create summary element that's always visible below the tab
       const summary = document.createElement("div");
