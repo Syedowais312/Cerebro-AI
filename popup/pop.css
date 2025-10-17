@@ -223,3 +223,15 @@ button:hover {
 ::-webkit-scrollbar-thumb:hover {
   background: #484f58;
 }
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.logo {
+  width: 36px; /* adjust as needed */
+  height: 36px;
+  border-radius: 6px;
+}
