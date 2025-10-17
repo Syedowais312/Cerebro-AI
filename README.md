@@ -1,57 +1,47 @@
-# Chrome AI APIs Setup Instructions
+# Cerebro-AI Chrome Extension
 
-## Prerequisites
+Cerebro-AI is a Chrome extension that uses AI to organize, summarize, and manage your browser tabs. It leverages Chrome's built-in Summarizer API (if available) and provides smart overlays, tooltips, and tab grouping features to enhance your browsing productivity.
 
-1. **Chrome Version**: You need Chrome Canary or Chrome with experimental features enabled
-2. **Chrome Flags**: Enable the following flags in Chrome:
-   - Go to `chrome://flags/`
-   - Search for and enable:
-     - `#ai-writer-api`
-     - `#ai-prompt-api`
-     - `#ai-proofreader-api`
-     - `#ai-summarizer-api`
-     - `#ai-translator-api`
-     - `#ai-language-detector-api`
+## Features
+- **AI Tab Summarization:** Automatically summarizes tab content using Chrome's Summarizer API or a custom fallback.
+- **Smart Overlays:** Displays tab summaries as overlays when you hover over tab items or activate a tab.
+- **Tab Grouping:** Organizes tabs into groups using AI-based classification.
+- **Popup UI:** View, search, and manage tabs from a convenient popup interface.
+- **Side Panel:** Additional tab management and summary features in a side panel.
 
-3. **Restart Chrome** after enabling the flags
+## Installation
+1. Clone or download this repository.
+2. Open Chrome and navigate to `chrome://extensions`.
+3. Enable "Developer mode" (top right).
+4. Click "Load unpacked" and select the `cerebro-AI` folder.
 
-## Testing the Extension
+## Usage
+- Click the Cerebro-AI icon in your Chrome toolbar to open the popup.
+- Hover over tab items to see AI-generated summaries as tooltips and overlays.
+- Use the popup or side panel to organize, search, and group your tabs.
 
-1. **Load the Extension**:
-   - Go to `chrome://extensions/`
-   - Enable "Developer mode"
-   - Click "Load unpacked" and select this folder
+## Project Structure
+```
+├── background.js         # Background script for tab management and summarization
+├── content\content.js    # Content script for displaying overlays
+├── manifest.json         # Chrome extension manifest
+├── popup\popup.js        # Popup UI logic
+├── popup\popup.html      # Popup UI markup
+├── popup\pop.css         # Popup UI styles
+├── scripts\ai.js         # Custom AI summarization logic
+├── sidepanel\panel.js    # Side panel logic
+├── sidepanel\index.html  # Side panel markup
+├── sidepanel\styles.css  # Side panel styles
+└── icons\icon128.png     # Extension icon
+```
 
-2. **Test API Availability**:
-   - Click the Cerebro extension icon
-   - Click "🔍 Check AI APIs" button
-   - Check the console (F12) for detailed API status
+## Requirements
+- Chrome browser (Manifest V3 support recommended)
+- (Optional) Chrome Summarizer API enabled for best results
 
-3. **Expected Results**:
-   - If APIs are available, you should see "APIs Available: prompt, summarizer, rewriter, translator, languageDetector"
-   - If not available, you'll see "APIs Available: None"
+## Development
+- Edit scripts and UI files as needed.
+- Reload the extension in `chrome://extensions` after making changes.
 
-## Troubleshooting
-
-### If APIs are not detected:
-
-1. **Check Chrome Version**: Make sure you're using Chrome Canary or the latest Chrome with experimental features
-2. **Check Flags**: Ensure all AI-related flags are enabled
-3. **Check Console**: Look for error messages in the browser console
-4. **Origin Trial Tokens**: The tokens are embedded in the HTML files, but Chrome extensions may need additional configuration
-
-### Alternative Testing:
-
-If the Chrome AI APIs are not available, the extension will fall back to:
-- Regex-based tab classification
-- Text extraction summarization
-- Basic translation/rewrite functionality
-
-## Current Origin Trial Tokens
-
-The extension includes these origin trial tokens:
-- **Writer API**: For content rewriting
-- **Prompt API**: For intelligent categorization  
-- **Proofreader API**: For grammar checking
-
-These tokens are embedded in the HTML files and should work when the Chrome AI APIs are properly enabled.
+## License
+MIT

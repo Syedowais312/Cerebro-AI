@@ -182,21 +182,68 @@ function summarizeExtractedText(raw) {
   return summary;
 }
 
-// Prefer Chrome's built-in Summarizer API when available
-async function summarizeWithChromeAI(text) {
-  try {
-    if (globalThis.ai && ai.summarizer && ai.summarizer.create) {
-      const summarizer = await ai.summarizer.create();
-      const output = await summarizer.summarize(text || "");
-      if (output && typeof output === "string" && output.trim()) {
-        return output.trim();
-      }
+// Helper: Use Chrome Summarizer API if available, fallback to custom summarizer
+async function summarizeWithChromeAI(raw) {
+  if (!raw) return "";
+  // Try Chrome Summarizer API
+  if (chrome.summarize) {
+    try {
+      const result = await chrome.summarize({ text: raw });
+      if (result && result.summary) return result.summary;
+    } catch (e) {
+      // API failed, fallback below
     }
-  } catch (e) {
-    console.warn("Chrome Summarizer API unavailable or failed:", e);
   }
-  return summarizeExtractedText(text || "");
+  // Fallback to custom summarizer
+  if (typeof window !== "undefined" && window.summarizeExtractedText) {
+    return await window.summarizeExtractedText(raw);
+  }
+  // Fallback: just truncate
+  return raw.slice(0, 300);
 }
+
+// Update summarizeTabSmart handler
+chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
+  if (msg && msg.action === "summarizeTabSmart" && msg.tabId) {
+    try {
+      const tabId = msg.tabId;
+      const tab = await new Promise(resolve => chrome.tabs.get(tabId, resolve));
+      if (!tab.url || /^(chrome|edge|about|chrome-extension):/i.test(tab.url)) {
+        sendResponse({ success: false, summary: tab.title || tab.url });
+        return true;
+      }
+      // Extract text from tab
+      const [result] = await new Promise(resolve => {
+        chrome.scripting.executeScript({
+          target: { tabId },
+          func: () => {
+            const meta = document.querySelector('meta[name="description"]');
+            const og = document.querySelector('meta[property="og:description"]');
+            const twitter = document.querySelector('meta[name="twitter:description"]');
+            const h1 = document.querySelector('h1');
+            const h2 = document.querySelector('h2');
+            let bestParagraph = "";
+            const paragraphs = document.querySelectorAll('p');
+            for (const p of paragraphs) {
+              const text = p.innerText?.trim();
+              if (text && text.length > 40) { bestParagraph = text; break; }
+            }
+            const text = [meta?.content, og?.content, twitter?.content, h1?.innerText, h2?.innerText, bestParagraph]
+              .filter(Boolean).join('. ');
+            return text || document.title || location.hostname;
+          },
+        }, (res) => resolve(res || []));
+      });
+      const raw = result && result.result ? result.result : "";
+      const summary = await summarizeWithChromeAI(raw);
+      sendResponse({ success: true, summary });
+      return true;
+    } catch (e) {
+      sendResponse({ success: false, summary: "" });
+      return true;
+    }
+  }
+});
 
 chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
   if (req.action === "getTabs") {
@@ -285,6 +332,15 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
       },
     }, async (results) => {
       const raw = results && results[0] ? results[0].result : "";
+      // Example: show summary overlay after summarizing
+      if (tab && tab.id && tab.url && !/^(chrome|edge|about|chrome-extension):/i.test(tab.url)) {
+        chrome.tabs.sendMessage(tab.id, { action: "showSummaryOverlay", summary }, (response) => {
+          if (chrome.runtime.lastError) {
+            // Optionally log or ignore the error
+            // console.warn("Could not send message:", chrome.runtime.lastError.message);
+          }
+        });
+      }
       const summary = await summarizeWithChromeAI(raw);
       sendResponse({ success: true, summary });
     });
